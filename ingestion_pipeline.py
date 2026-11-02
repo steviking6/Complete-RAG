@@ -9,7 +9,7 @@ from pathlib import Path
 
 load_dotenv()
 
-def load_documents(docs_path:Path = "docs"):
+def load_documents(docs_path: str | Path = "docs"):
     """load all exists files from the docs directory."""
     print(f"loading documents from {docs_path}...")
     
@@ -20,8 +20,9 @@ def load_documents(docs_path:Path = "docs"):
     #load all txt files from the docs directory 
     loader = DirectoryLoader(
         path=docs_path,
-        glob=".txt",
-        loader_cls=TextLoader
+        glob="*.txt",
+        loader_cls=TextLoader,
+        loader_kwargs={"encoding": "utf-8-sig"},
     )
     
     documents = loader.load()
@@ -38,8 +39,63 @@ def load_documents(docs_path:Path = "docs"):
     
     return documents
 
+def  split_documents(documents, chunk_size=800, chunk_overlap=0):
+    """split documents into smaller chunks with overlap."""
+    
+    print("Splitting docs into chunks...")
+    text_splitter = CharacterTextSplitter(
+        chunk_size=chunk_size,
+        chunk_overlap=chunk_overlap,
+    )
+    
+    chunks = text_splitter.split_documents(documents)
+    
+    # if chunks:
+    #     for i, chunk in enumerate(chunks[:5]):
+    #         print(f"\n ------- Chunk {i+1} -------")
+    #         print(f" Source : {chunk.metadata['source']}")
+    #         print(f" Content length : {len(chunk.page_content)} characters")
+    #         print(" Content : ...")
+    #         print(chunk.page_content)
+    #         print(f" metadata: {chunk.metadata}")
+    #         print("-"*50)
+
+    return chunks
+
+def create_vectorstore(chunks, persist_directory="db/chroma_db"):
+    """create and persist Chroma vectorstore from the document chunks."""
+    
+    embedding_model = OpenAIEmbeddings(
+        model="text-embedding-3-small",
+        openai_api_key=os.environ.get("OPENAI_API_KEY"),
+    )
+    
+    #Create ChromaDB vecorstore from the document chunks 
+    print("-----Creating vector store-----")
+    vectorstore = Chroma.from_documents(
+        documents=chunks,
+        embedding=embedding_model,
+        persist_directory=persist_directory,
+        collection_metadata={"hnsw:space": "cosine"}
+    )
+    
+    print("----Finished creating vector store-----")
+    
+    print(f"vector store created and saved to {persist_directory}")
+    return vectorstore
+
+
 def main():
     print("main function")
+    
+    #1. Load the files
+    documents = load_documents(docs_path="docs")
+    
+    #2. Chunking the files
+    chunks = split_documents(documents, chunk_size=800, chunk_overlap=0)
+    
+    #3. Embedding the chunks and storin into Vector DB
+    vectorstore = create_vectorstore(chunks)
     
 if __name__ == "__main__":
     main()
